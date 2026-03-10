@@ -1,0 +1,201 @@
+<div class="row justify-content-center">
+    <% if (user.role === 'admin') { %>
+        <div class="col-md-4 mb-4">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-primary text-white py-3">
+                    <h5 class="mb-0"><i class="bi bi-people-fill me-2"></i>Клиенты</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush" id="rooms-list" style="height: 460px; overflow-y: auto;">
+                        <!-- Room list here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+    <% } else { %>
+        <div class="col-md-8">
+    <% } %>
+
+        <div class="card shadow-sm border-0 h-100" id="chat-container" <%- user.role === 'admin' ? 'style="display:none;"' : '' %>>
+            <div class="card-header bg-success text-white py-3 d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    <i class="bi bi-chat-dots-fill me-2"></i>
+                    <span id="chat-title"><%= user.role === 'admin' ? 'Выберите чат' : 'Чат поддержки' %></span>
+                </h5>
+                <span class="badge bg-light text-success" id="chat-status">Подключено</span>
+            </div>
+            <div class="card-body p-0 d-flex flex-column" style="height: 400px;">
+                <div id="chat-messages" class="p-4 flex-grow-1" style="overflow-y: auto; background-color: #f8f9fa;">
+                    <!-- Messages here -->
+                </div>
+            </div>
+            <div class="card-footer bg-white p-3 border-top-0 mt-auto">
+                <form id="chat-form" class="d-flex gap-2">
+                    <input type="text" id="chat-input" class="form-control" placeholder="Введите сообщение..." required autocomplete="off">
+                    <button type="submit" class="btn btn-success px-4"><i class="bi bi-send-fill"></i></button>
+                </form>
+            </div>
+        </div>
+        
+        <% if (user.role === 'admin') { %>
+            <div class="card shadow-sm border-0 h-100" id="no-chat-selected">
+                <div class="card-body d-flex flex-column justify-content-center align-items-center text-muted" style="height: 520px;">
+                    <i class="bi bi-chat-left-text display-1 mb-3"></i>
+                    <h5>Выберите клиента для начала общения</h5>
+                </div>
+            </div>
+        <% } %>
+
+    </div>
+</div>
+
+<script>
+    const currentUser = '<%= user.username %>';
+    const currentRole = '<%= user.role %>';
+    
+    let currentRoomId = currentRole === 'admin' ? null : currentUser;
+    let lastMessagesCount = 0;
+    
+    const chatContainer = document.getElementById('chat-container');
+    const noChatSelected = document.getElementById('no-chat-selected');
+    const chatMessages = document.getElementById('chat-messages');
+    const chatForm = document.getElementById('chat-form');
+    const chatInput = document.getElementById('chat-input');
+    const roomsList = document.getElementById('rooms-list');
+    const chatTitle = document.getElementById('chat-title');
+
+    function escapeHtml(unsafe) {
+        if (!unsafe) return '';
+        return unsafe
+            .toString()
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    async function fetchRooms() {
+        if (currentRole !== 'admin') return;
+        try {
+            const res = await fetch('/chat/rooms');
+            if (res.ok) {
+                const rooms = await res.json();
+                renderRooms(rooms);
+            }
+        } catch (e) {
+            console.error('Ошибка загрузки комнат', e);
+        }
+    }
+
+    function renderRooms(rooms) {
+        if (!roomsList) return;
+        
+        let html = '';
+        if (rooms.length === 0) {
+            html = '<div class="p-3 text-muted text-center">Нет активных чатов</div>';
+        } else {
+            rooms.forEach(room => {
+                const activeClass = room === currentRoomId ? 'active bg-primary border-primary' : '';
+                html += `
+                    <button class="list-group-item list-group-item-action ${activeClass} fw-bold d-flex align-items-center" onclick="selectRoom('${room}')">
+                        <i class="bi bi-person-circle fs-4 me-3"></i>
+                        ${room}
+                    </button>
+                `;
+            });
+        }
+        roomsList.innerHTML = html;
+    }
+
+    window.selectRoom = function(roomId) {
+        currentRoomId = roomId;
+        lastMessagesCount = 0;
+        chatMessages.innerHTML = '';
+        
+        if (noChatSelected) noChatSelected.style.display = 'none';
+        chatContainer.style.display = 'flex';
+        chatContainer.classList.add('flex-column');
+        chatTitle.innerText = `Чат с клиентом: ${roomId}`;
+        
+        fetchRooms(); // to update active state
+        fetchMessages();
+    };
+
+    async function fetchMessages() {
+        if (!currentRoomId) return;
+        
+        try {
+            const res = await fetch(`/chat/${currentRoomId}/messages`);
+            if (res.ok) {
+                const messages = await res.json();
+                renderMessages(messages);
+            }
+        } catch (e) {
+            console.error('Ошибка загрузки сообщений', e);
+        }
+    }
+
+    function renderMessages(messages) {
+        if (messages.length === lastMessagesCount) return;
+        
+        chatMessages.innerHTML = '';
+        messages.forEach(msg => {
+            const isMine = msg.sender === currentUser;
+            const isAdmin = msg.role === 'ADMIN';
+            
+            const alignClass = isMine ? 'text-end' : 'text-start';
+            const bgClass = isMine ? 'bg-success text-white' : (isAdmin ? 'bg-warning text-dark' : 'bg-white border border-success border-opacity-25');
+            const nameColor = isMine ? 'text-white-50' : (isAdmin ? 'text-danger' : 'text-success');
+            const timeStr = new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+
+            const msgHtml = `
+                <div class="mb-3 ${alignClass}">
+                    <div class="d-inline-block p-2 px-3 rounded-3 shadow-sm text-start ${bgClass}" style="max-width: 85%;">
+                        <div class="small fw-bold ${nameColor} mb-1">
+                            ${msg.sender} ${isAdmin ? '<i class="bi bi-star-fill small ms-1"></i>' : ''}
+                        </div>
+                        <div style="word-wrap: break-word;">${msg.content}</div>
+                        <div class="text-end small mt-1" style="font-size: 0.75em; opacity: 0.8;">${timeStr}</div>
+                    </div>
+                </div>
+            `;
+            chatMessages.insertAdjacentHTML('beforeend', msgHtml);
+        });
+        
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+        lastMessagesCount = messages.length;
+    }
+
+    chatForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const content = chatInput.value.trim();
+        if (!content || !currentRoomId) return;
+
+        chatInput.value = '';
+        try {
+            await fetch(`/chat/${currentRoomId}/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content })
+            });
+            fetchMessages(); 
+            if (currentRole === 'admin') fetchRooms(); // Update rooms in case a new room was created
+        } catch (e) {
+            console.error('Ошибка отправки', e);
+        }
+    });
+
+    // Start polling
+    if (currentRole === 'admin') {
+        fetchRooms();
+        setInterval(() => {
+            fetchRooms();
+            if (currentRoomId) fetchMessages();
+        }, 2000);
+    } else {
+        fetchMessages();
+        setInterval(fetchMessages, 2000);
+    }
+</script>
