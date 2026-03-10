@@ -37,8 +37,6 @@ public class JwtService {
     }
 
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
-        // Добавляем username и роль для совместимости с фронтендом, 
-        // который читает из токена эти поля (как в Node.js версии)
         extraClaims.put("username", userDetails.getUsername());
         extraClaims.put("role", userDetails.getAuthorities().iterator().next().getAuthority().replace("ROLE_", "").toLowerCase());
         

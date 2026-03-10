@@ -1,2 +1,21 @@
-GUIDE.md
-SAVE.md
+# IDE
+.idea/
+.vscode/
+*.iml
+*.iws
+*.ipr
+
+# Backend
+backend/target/
+backend/.mvn/wrapper/maven-wrapper.jar
+backend/*.mv.db
+
+# Frontend
+frontend/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
